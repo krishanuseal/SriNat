@@ -266,7 +266,7 @@
 
       // Timeout controller to prevent infinite spinning
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
 
       const response = await fetch('https://plant.id/api/v3/identification', {
         method: 'POST',
