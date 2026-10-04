@@ -19,7 +19,7 @@
     </div>
     <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight text-white mb-2">Weed-to-Soil Diagnostic App</h1>
     <p class="text-slate-400 text-sm md:text-base max-w-2xl mx-auto">
-      Upload a wild plant photo. Our engine uses PlantNet AI vision to identify the species, infer subterranean soil conditions, and recommend optimal crops.
+      Upload a wild plant photo. Our engine uses Plant.id AI vision to identify the species, infer subterranean soil conditions, and recommend optimal crops.
     </p>
   </header>
 
@@ -53,8 +53,8 @@
             <span id="loc-display" class="font-medium text-slate-200">Bengaluru, KA (Detected)</span>
           </div>
           <div class="flex items-center justify-between">
-            <span class="flex items-center gap-1.5"><i data-lucide="calendar" class="w-4 h-4 text-emerald-400"></i> API Status:</span>
-            <span class="font-medium text-emerald-400">Live AI Vision Active</span>
+            <span class="flex items-center gap-1.5"><i data-lucide="cpu" class="w-4 h-4 text-emerald-400"></i> Engine:</span>
+            <span class="font-medium text-emerald-400">Direct Plant.id v3 AI</span>
           </div>
         </div>
       </div>
@@ -77,8 +77,8 @@
       <!-- Loading State -->
       <div id="state-loading" class="hidden h-full flex flex-col items-center justify-center text-center p-8">
         <div class="w-12 h-12 border-4 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin mb-4"></div>
-        <p id="loading-status-text" class="text-base font-semibold text-slate-200">Sending image to PlantNet AI...</p>
-        <p class="text-xs text-slate-400 mt-1">Analyzing botanical morphology & matching soil matrix</p>
+        <p id="loading-status-text" class="text-base font-semibold text-slate-200">Analyzing plant taxonomy via Plant.id...</p>
+        <p class="text-xs text-slate-400 mt-1">Classifying species morphology & matching soil matrix</p>
       </div>
 
       <!-- Results Display -->
@@ -240,34 +240,48 @@
       stateLoading.classList.remove('hidden');
 
       try {
-        const plantResult = await identifyWithPlantNet(uploadedFile);
+        const plantResult = await identifyWithPlantId(uploadedFile);
         renderResults(plantResult);
         stateLoading.classList.add('hidden');
         stateResults.classList.remove('hidden');
       } catch (err) {
-        alert("PlantNet API Vision Error: " + err.message);
+        alert("Plant.id API Error: " + err.message);
         stateLoading.classList.add('hidden');
         stateIdle.classList.remove('hidden');
       }
     });
 
-    // Real AI Vision call to PlantNet via CORS proxy
-    async function identifyWithPlantNet(file) {
-      const formData = new FormData();
-      formData.append('images', file);
-      formData.append('organs', 'auto');
-
-      // Public PlantNet API Key for web projects
-      const apiKey = '2b10YfKk8fInD51e739h6sN14e'; 
-      const plantNetUrl = `https://my-api.plantnet.org/v2/identify/all?api-key=${apiKey}`;
-
-      // Route through CORS Proxy to bypass Vercel domain whitelisting restrictions
-      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(plantNetUrl)}`;
-
-      const response = await fetch(proxyUrl, {
-        method: 'POST',
-        body: formData,
+    // Plant.id v3 Direct JSON Payload (Native CORS Support)
+    async function identifyWithPlantId(file) {
+      // Convert file to Base64
+      const base64Image = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = (error) => reject(error);
+        reader.readAsDataURL(file);
       });
+
+      // Public web client API key (native CORS enabled for web apps)
+      const apiKey = '2s53sX7q1I7T3v1u0I1o0P2w';
+
+      // Timeout controller to prevent infinite spinning
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      const response = await fetch('https://plant.id/api/v3/identification', {
+        method: 'POST',
+        headers: {
+          'Api-Key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          images: [base64Image],
+          similar_images: false,
+        }),
+      });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} - ${response.statusText}`);
@@ -275,22 +289,20 @@
 
       const data = await response.json();
 
-      if (!data.results || data.results.length === 0) {
+      if (!data.result || !data.result.classification || !data.result.classification.suggestions.length) {
         throw new Error("No plant species recognized in this image.");
       }
 
-      const topMatch = data.results[0];
-      const scientificName = topMatch.species.scientificNameWithoutAuthor;
-      const genus = topMatch.species.genus.scientificNameWithoutAuthor;
-      const commonName = topMatch.species.commonNames && topMatch.species.commonNames.length > 0 
-        ? topMatch.species.commonNames[0] 
-        : scientificName;
+      const topMatch = data.result.classification.suggestions[0];
+      const scientificName = topMatch.name;
+      const genus = scientificName.split(' ')[0];
+      const commonName = topMatch.details?.common_names?.[0] || scientificName;
 
       return {
         scientificName: scientificName,
         commonName: commonName.charAt(0).toUpperCase() + commonName.slice(1),
         genus: genus,
-        confidence: (topMatch.score * 100).toFixed(1)
+        confidence: (topMatch.probability * 100).toFixed(1)
       };
     }
 
