@@ -243,8 +243,9 @@
       try {
         let plantResult;
         if (apiKey) {
-          loadingText.textContent = "Querying PlantNet API...";
-          plantResult = await identifyWithPlantNet(uploadedFile, apiKey);
+          loadingText.textContent = "Querying iNaturalist API...";
+          //plantResult = await identifyWithPlantNet(uploadedFile, apiKey);
+          plantResult = await identifyWithINaturalist(uploadedFile);
         } else {
           loadingText.textContent = "Fallback: Querying Open GBIF Taxonomy Database...";
           await new Promise(r => setTimeout(r, 1200));
@@ -266,6 +267,34 @@
       }
     });
 
+    async function identifyWithINaturalist(file) {
+      const formData = new FormData();
+      formData.append('image', file);
+    
+      // iNaturalist Computer Vision Endpoint (Open access)
+      const response = await fetch('https://api.inaturalist.org/v1/computervision/score_observation', {
+        method: 'POST',
+        body: formData,
+      });
+    
+      if (!response.ok) throw new Error(`iNaturalist HTTP ${response.status}`);
+    
+      const data = await response.json();
+      if (!data.results || data.results.length === 0) {
+        throw new Error('No plant matched.');
+      }
+    
+      const topMatch = data.results[0];
+      const genus = topMatch.taxon.ancestor_ids ? topMatch.taxon.name.split(' ')[0] : topMatch.taxon.name;
+    
+      return {
+        scientificName: topMatch.taxon.name,
+        commonName: topMatch.taxon.preferred_common_name || topMatch.taxon.name,
+        genus: genus,
+        confidence: (topMatch.combined_score * 100).toFixed(1)
+      };
+    }
+    
     // Real API Call to PlantNet Identification Service
     async function identifyWithPlantNet(file, apiKey) {
       const formData = new FormData();
