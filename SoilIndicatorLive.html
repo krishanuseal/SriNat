@@ -24,7 +24,7 @@
     </h1>
     
     <p class="text-slate-300 text-sm md:text-base max-w-2xl mx-auto leading-relaxed">
-      We lookup the uploaded image of the weed growing naturally at this very geolocation and query the PlantNet database to identify the plant that gives bio-indicators for the soil and environmental conditions at this spot. It then suggests what beneficial plants can be grown in those conditions.
+      We lookup the uploaded image of the weed growing naturally at this location to identify bio-indicators for soil and environmental conditions, then suggest suitable regional crops to grow.
     </p>
   </header>
 
@@ -53,10 +53,10 @@
         </div>
       </div>
 
-      <!-- Step 2: Geolocation Permission -->
+      <!-- Step 2: Location Tagging -->
       <div class="space-y-3 pt-2 border-t border-slate-700/50">
         <h2 class="text-base font-bold text-white flex items-center gap-2">
-          <i data-lucide="map-pin" class="text-emerald-400 w-5 h-5"></i> 2. Geo-Tag Location
+          <i data-lucide="map-pin" class="text-emerald-400 w-5 h-5"></i> 2. Target Location
         </h2>
 
         <div class="bg-slate-900/50 rounded-xl p-3 border border-slate-700/50 flex flex-col gap-2">
@@ -88,7 +88,7 @@
       <!-- Loading State -->
       <div id="state-loading" class="hidden h-full flex flex-col items-center justify-center text-center p-8">
         <div class="w-12 h-12 border-4 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin mb-4"></div>
-        <p id="loading-status-text" class="text-base font-semibold text-slate-200">Querying PlantNet Database...</p>
+        <p id="loading-status-text" class="text-base font-semibold text-slate-200">Analyzing Bio-Indicator...</p>
       </div>
 
       <!-- Results State -->
@@ -103,7 +103,10 @@
         </div>
 
         <div>
-          <h4 class="text-xs font-semibold text-slate-400 uppercase mb-3">Soil & Environmental Conditions</h4>
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="text-xs font-semibold text-slate-400 uppercase">Soil & Environmental Conditions</h4>
+            <span id="res-location-badge" class="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">Bangalore</span>
+          </div>
           <div class="grid grid-cols-2 gap-3 text-xs">
             <div class="bg-slate-900/50 p-3 rounded-lg"><span class="text-slate-400 block mb-1">Nitrogen Status</span><span id="res-soil-n" class="font-bold text-slate-200">--</span></div>
             <div class="bg-slate-900/50 p-3 rounded-lg"><span class="text-slate-400 block mb-1">Compaction</span><span id="res-soil-comp" class="font-bold text-slate-200">--</span></div>
@@ -113,7 +116,7 @@
         </div>
 
         <div>
-          <h4 class="text-xs font-semibold text-slate-400 uppercase mb-3">Recommended Beneficial Crops</h4>
+          <h4 class="text-xs font-semibold text-slate-400 uppercase mb-3">Recommended Beneficial Crops for Location</h4>
           <div id="res-crops-list" class="space-y-2"></div>
         </div>
       </div>
@@ -132,7 +135,7 @@
       "Plantago": { nitrogen: "Low", compaction: "Severely Compacted", moisture: "Dry", ph: "5.8 - 7.0", crops: [{ name: "Beets", reason: "Tolerates firm soil.", badge: "Root Crop" }] }
     };
 
-    const BANGALORE_COORDS = { lat: "12.9716", lng: "77.5946" };
+    const BANGALORE_COORDS = { lat: "12.9716", lng: "77.5946", label: "Bangalore" };
     let userCoords = { ...BANGALORE_COORDS };
 
     const dropZone = document.getElementById('drop-zone');
@@ -157,13 +160,14 @@
         (position) => {
           userCoords = {
             lat: position.coords.latitude.toFixed(4),
-            lng: position.coords.longitude.toFixed(4)
+            lng: position.coords.longitude.toFixed(4),
+            label: `${position.coords.latitude.toFixed(2)}°, ${position.coords.longitude.toFixed(2)}°`
           };
           locationStatus.textContent = `GPS: ${userCoords.lat}, ${userCoords.lng}`;
           locationStatus.className = 'text-center text-xs text-emerald-400 font-mono py-1';
         },
         (error) => {
-          console.warn('Geolocation failed. Defaulting to Bangalore:', error);
+          console.warn('Geolocation failed/denied. Defaulting to Bangalore:', error);
           userCoords = { ...BANGALORE_COORDS };
           locationStatus.textContent = 'Default: Bangalore (12.9716, 77.5946)';
           locationStatus.className = 'text-center text-xs text-amber-400 font-mono py-1';
@@ -224,17 +228,12 @@
       try {
         const compressedFile = await compressImage(uploadedFile);
 
+        // Standard PlantNet payload containing strictly images & organs
         const formData = new FormData();
         formData.append('images', compressedFile);
         formData.append('organs', 'auto');
 
-        // Pass lat and lon as URL query parameters instead of FormData
-        const queryParams = new URLSearchParams({
-          lat: userCoords.lat,
-          lon: userCoords.lng
-        });
-
-        const response = await fetch(`/api/identify?${queryParams.toString()}`, {
+        const response = await fetch('/api/identify', {
           method: 'POST',
           body: formData
         });
@@ -275,6 +274,7 @@
       document.getElementById('res-plant-name').textContent = result.commonName;
       document.getElementById('res-botanical-name').textContent = result.scientificName;
       document.getElementById('res-confidence').textContent = `${result.confidence}% Match`;
+      document.getElementById('res-location-badge').textContent = userCoords.label;
 
       const matchedTraits = INDICATOR_RULES[result.genus] || {
         nitrogen: "Moderate", compaction: "Standard Loam", moisture: "Well-Drained", ph: "6.0 - 7.0",
