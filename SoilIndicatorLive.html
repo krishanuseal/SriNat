@@ -9,6 +9,7 @@
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen font-sans flex flex-col items-center justify-start p-4 md:p-8">
 
+  <!-- Header -->
   <header class="max-w-4xl w-full text-center mb-8">
     <div class="inline-flex items-center gap-2 text-emerald-400 mb-2">
       <i data-lucide="sprout" class="w-8 h-8"></i>
@@ -16,12 +17,14 @@
     </div>
     <h1 class="text-3xl md:text-5xl font-extrabold tracking-tight text-white mb-2">Weed-to-Soil Diagnostic App</h1>
     <p class="text-slate-400 text-sm md:text-base max-w-2xl mx-auto">
-      Powered by PlantNet via Vercel Serverless Function.
+      Upload a plant photo to diagnose soil conditions and crop suitability.
     </p>
   </header>
 
+  <!-- Main Container -->
   <main class="max-w-4xl w-full grid grid-cols-1 md:grid-cols-12 gap-6">
 
+    <!-- Upload Column -->
     <section class="md:col-span-5 bg-slate-800/80 border border-slate-700/60 rounded-2xl p-6 flex flex-col justify-between shadow-xl">
       <div class="space-y-4">
         <h2 class="text-lg font-bold text-white flex items-center gap-2">
@@ -45,16 +48,17 @@
       </button>
     </section>
 
+    <!-- Results Column -->
     <section class="md:col-span-7 bg-slate-800/80 border border-slate-700/60 rounded-2xl p-6 shadow-xl flex flex-col justify-between">
       
       <div id="state-idle" class="h-full flex flex-col items-center justify-center text-center p-8 text-slate-500">
         <i data-lucide="globe" class="w-16 h-16 mb-4 text-slate-600"></i>
-        <p class="text-lg font-medium text-slate-400">Awaiting Upload</p>
+        <p class="text-lg font-medium text-slate-400">Awaiting Image Upload</p>
       </div>
 
       <div id="state-loading" class="hidden h-full flex flex-col items-center justify-center text-center p-8">
         <div class="w-12 h-12 border-4 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin mb-4"></div>
-        <p id="loading-status-text" class="text-base font-semibold text-slate-200">Processing via Vercel Backend...</p>
+        <p id="loading-status-text" class="text-base font-semibold text-slate-200">Analyzing plant image...</p>
       </div>
 
       <div id="state-results" class="hidden space-y-6">
@@ -89,6 +93,9 @@
   <script>
     lucide.createIcons();
 
+    // Paste your PlantNet API key here
+    const PLANTNET_API_KEY = "2b102j8eYtG42aZJgPZ5I5uG";
+
     const INDICATOR_RULES = {
       "Trifolium": { nitrogen: "Low / Active N-Fixer", compaction: "Low/Moderate", moisture: "Well-Drained", ph: "6.0 - 7.2", crops: [{ name: "Cabbage & Kale", reason: "Uses fixed N.", badge: "Heavy Feeder" }] },
       "Taraxacum": { nitrogen: "Moderate", compaction: "Hardpan Clay", moisture: "Variable", ph: "5.5 - 7.5", crops: [{ name: "Daikon Radish", reason: "Breaks hardpan.", badge: "Bio-Drill" }] },
@@ -117,38 +124,6 @@
       }
     });
 
-    // Downscale photo on Canvas to keep payload light
-    function resizeAndEncodeToBase64(file, maxDim = 1200) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const img = new Image();
-          img.onload = () => {
-            let { width, height } = img;
-            if (width > maxDim || height > maxDim) {
-              if (width > height) {
-                height = Math.round((height * maxDim) / width);
-                width = maxDim;
-              } else {
-                width = Math.round((width * maxDim) / height);
-                height = maxDim;
-              }
-            }
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.85));
-          };
-          img.onerror = reject;
-          img.src = e.target.result;
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
-
     analyzeBtn.addEventListener('click', async () => {
       if (!uploadedFile) return;
 
@@ -157,23 +132,28 @@
       document.getElementById('state-loading').classList.remove('hidden');
 
       try {
-        const base64String = await resizeAndEncodeToBase64(uploadedFile);
+        const formData = new FormData();
+        formData.append('images', uploadedFile);
+        formData.append('organs', 'auto');
 
-        const response = await fetch('/api/identify', {
+        // Proxy request through corsproxy.io to avoid CORS and Cloud IP restrictions
+        const targetUrl = `https://my-api.plantnet.org/v2/identify/all?api-key=${PLANTNET_API_KEY.trim()}`;
+        const proxyUrl = `https://corsproxy.io/?` + encodeURIComponent(targetUrl);
+
+        const response = await fetch(proxyUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ base64Image: base64String })
+          body: formData
         });
 
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || `HTTP Error ${response.status}`);
+          throw new Error(errData.message || `HTTP Error ${response.status}`);
         }
 
         const data = await response.json();
 
         if (!data.results || data.results.length === 0) {
-          throw new Error("No species matched from PlantNet.");
+          throw new Error("No plant species matched.");
         }
 
         const topMatch = data.results[0];
@@ -191,7 +171,7 @@
         document.getElementById('state-loading').classList.add('hidden');
         document.getElementById('state-results').classList.remove('hidden');
       } catch (err) {
-        alert("Serverless Request Failed: " + err.message);
+        alert("Identification Failed: " + err.message);
         document.getElementById('state-loading').classList.add('hidden');
         document.getElementById('state-idle').classList.remove('hidden');
       }
