@@ -31,7 +31,7 @@
   <!-- Main Grid -->
   <main class="max-w-4xl w-full grid grid-cols-1 md:grid-cols-12 gap-6">
 
-    <!-- Input Column (Image & Geolocation) -->
+    <!-- Input Column -->
     <section class="md:col-span-5 bg-slate-800/80 border border-slate-700/60 rounded-2xl p-6 flex flex-col justify-between shadow-xl space-y-6">
       
       <!-- Step 1: Image Upload -->
@@ -132,7 +132,6 @@
       "Plantago": { nitrogen: "Low", compaction: "Severely Compacted", moisture: "Dry", ph: "5.8 - 7.0", crops: [{ name: "Beets", reason: "Tolerates firm soil.", badge: "Root Crop" }] }
     };
 
-    // Default coordinates: Bangalore, India
     const BANGALORE_COORDS = { lat: "12.9716", lng: "77.5946" };
     let userCoords = { ...BANGALORE_COORDS };
 
@@ -144,7 +143,6 @@
 
     let uploadedFile = null;
 
-    // Handle Geolocation Prompt
     getLocationBtn.addEventListener('click', () => {
       if (!navigator.geolocation) {
         locationStatus.textContent = 'GPS unsupported. Default: Bangalore';
@@ -165,7 +163,7 @@
           locationStatus.className = 'text-center text-xs text-emerald-400 font-mono py-1';
         },
         (error) => {
-          console.warn('Geolocation denied/failed. Defaulting to Bangalore:', error);
+          console.warn('Geolocation failed. Defaulting to Bangalore:', error);
           userCoords = { ...BANGALORE_COORDS };
           locationStatus.textContent = 'Default: Bangalore (12.9716, 77.5946)';
           locationStatus.className = 'text-center text-xs text-amber-400 font-mono py-1';
@@ -174,7 +172,6 @@
       );
     });
 
-    // Handle Image Selection
     dropZone.addEventListener('click', () => imageInput.click());
     imageInput.addEventListener('change', (e) => {
       if (e.target.files.length) {
@@ -230,12 +227,14 @@
         const formData = new FormData();
         formData.append('images', compressedFile);
         formData.append('organs', 'auto');
-        
-        // Append latitude & longitude (either user GPS or Bangalore default)
-        formData.append('lat', userCoords.lat);
-        formData.append('lon', userCoords.lng);
 
-        const response = await fetch('/api/identify', {
+        // Pass lat and lon as URL query parameters instead of FormData
+        const queryParams = new URLSearchParams({
+          lat: userCoords.lat,
+          lon: userCoords.lng
+        });
+
+        const response = await fetch(`/api/identify?${queryParams.toString()}`, {
           method: 'POST',
           body: formData
         });
