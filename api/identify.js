@@ -1,9 +1,3 @@
-export const config = {
-  api: {
-    bodyParser: false, // Disables body parsing so raw multipart stream forwards directly
-  },
-};
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -13,28 +7,35 @@ export default async function handler(req, res) {
     const apiKey = process.env.PLANTNET_API_KEY;
 
     if (!apiKey) {
-      return res.status(500).json({ error: 'PLANTNET_API_KEY environment variable is missing in Vercel.' });
+      return res.status(500).json({ error: 'PLANTNET_API_KEY is not configured in Vercel.' });
     }
 
+    const { base64Image } = req.body;
+
+    if (!base64Image) {
+      return res.status(400).json({ error: 'No base64Image provided.' });
+    }
+
+    // Pass the image data directly to PlantNet API via JSON format
     const plantnetUrl = `https://my-api.plantnet.org/v2/identify/all?api-key=${apiKey.trim()}`;
 
-    const plantnetResponse = await fetch(plantnetUrl, {
+    const response = await fetch(plantnetUrl, {
       method: 'POST',
       headers: {
-        'content-type': req.headers['content-type'],
-        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Content-Type': 'application/json',
       },
-      body: req,
-      duplex: 'half',
+      body: JSON.stringify({
+        images: [base64Image],
+        organs: ['auto']
+      }),
     });
 
-    const data = await plantnetResponse.json();
+    const data = await response.json();
 
-    if (!plantnetResponse.ok) {
-      // Return the detailed error message from PlantNet if available
-      return res.status(plantnetResponse.status).json({
-        error: data.message || `PlantNet API returned HTTP ${plantnetResponse.status}`,
-        details: data
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: data.message || `PlantNet returned HTTP ${response.status}`,
+        details: data,
       });
     }
 
