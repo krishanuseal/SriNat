@@ -31,28 +31,47 @@
   <!-- Main Grid -->
   <main class="max-w-4xl w-full grid grid-cols-1 md:grid-cols-12 gap-6">
 
-    <!-- Upload Input Column -->
-    <section class="md:col-span-5 bg-slate-800/80 border border-slate-700/60 rounded-2xl p-6 flex flex-col justify-between shadow-xl">
-      <div class="space-y-4">
-        <h2 class="text-lg font-bold text-white flex items-center gap-2">
-          <i data-lucide="camera" class="text-emerald-400 w-5 h-5"></i> Upload Plant Image
+    <!-- Input Column (Image & Geolocation) -->
+    <section class="md:col-span-5 bg-slate-800/80 border border-slate-700/60 rounded-2xl p-6 flex flex-col justify-between shadow-xl space-y-6">
+      
+      <!-- Step 1: Image Upload -->
+      <div class="space-y-3">
+        <h2 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="camera" class="text-emerald-400 w-5 h-5"></i> 1. Upload Plant Image
         </h2>
 
-        <!-- Image Upload Box -->
-        <div id="drop-zone" class="border-2 border-dashed border-slate-600 hover:border-emerald-500 rounded-xl p-6 text-center cursor-pointer transition bg-slate-900/50 flex flex-col items-center justify-center min-h-[220px] relative">
+        <div id="drop-zone" class="border-2 border-dashed border-slate-600 hover:border-emerald-500 rounded-xl p-4 text-center cursor-pointer transition bg-slate-900/50 flex flex-col items-center justify-center min-h-[180px] relative">
           <input type="file" id="image-input" accept="image/*" class="hidden" />
           
           <div id="upload-prompt" class="flex flex-col items-center">
-            <i data-lucide="image-plus" class="w-12 h-12 text-slate-500 mb-3"></i>
-            <p class="text-sm font-medium text-slate-300">Click to upload plant image</p>
-            <p class="text-xs text-slate-500 mt-1">Photo compressed auto-client side</p>
+            <i data-lucide="image-plus" class="w-10 h-10 text-slate-500 mb-2"></i>
+            <p class="text-sm font-medium text-slate-300">Click to upload image</p>
+            <p class="text-[11px] text-slate-500 mt-1">Auto-compressed client side</p>
           </div>
 
           <img id="image-preview" class="hidden absolute inset-0 w-full h-full object-cover rounded-xl" alt="Preview" />
         </div>
       </div>
 
-      <button id="analyze-btn" disabled class="mt-6 w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 text-slate-950 font-bold py-3 rounded-xl transition flex items-center justify-center gap-2">
+      <!-- Step 2: Geolocation Permission -->
+      <div class="space-y-3 pt-2 border-t border-slate-700/50">
+        <h2 class="text-base font-bold text-white flex items-center gap-2">
+          <i data-lucide="map-pin" class="text-emerald-400 w-5 h-5"></i> 2. Geo-Tag Location
+        </h2>
+
+        <div class="bg-slate-900/50 rounded-xl p-3 border border-slate-700/50 flex flex-col gap-2">
+          <button id="get-location-btn" type="button" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 text-xs font-semibold py-2 px-3 rounded-lg transition flex items-center justify-center gap-2">
+            <i data-lucide="navigation" class="w-4 h-4 text-emerald-400"></i> Use Precise GPS Location
+          </button>
+          
+          <div id="location-status" class="text-center text-xs text-emerald-400 font-mono py-1">
+            Default: Bangalore (12.9716, 77.5946)
+          </div>
+        </div>
+      </div>
+
+      <!-- Analyze Action -->
+      <button id="analyze-btn" disabled class="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 text-slate-950 font-bold py-3 rounded-xl transition flex items-center justify-center gap-2">
         <i data-lucide="sparkles" class="w-5 h-5"></i> Identify & Diagnose
       </button>
     </section>
@@ -63,7 +82,7 @@
       <!-- Idle State -->
       <div id="state-idle" class="h-full flex flex-col items-center justify-center text-center p-8 text-slate-500">
         <i data-lucide="globe" class="w-16 h-16 mb-4 text-slate-600"></i>
-        <p class="text-lg font-medium text-slate-400">Awaiting Plant Upload</p>
+        <p class="text-lg font-medium text-slate-400">Awaiting Image Upload</p>
       </div>
 
       <!-- Loading State -->
@@ -113,11 +132,49 @@
       "Plantago": { nitrogen: "Low", compaction: "Severely Compacted", moisture: "Dry", ph: "5.8 - 7.0", crops: [{ name: "Beets", reason: "Tolerates firm soil.", badge: "Root Crop" }] }
     };
 
-    let uploadedFile = null;
+    // Default coordinates: Bangalore, India
+    const BANGALORE_COORDS = { lat: "12.9716", lng: "77.5946" };
+    let userCoords = { ...BANGALORE_COORDS };
+
     const dropZone = document.getElementById('drop-zone');
     const imageInput = document.getElementById('image-input');
     const analyzeBtn = document.getElementById('analyze-btn');
+    const getLocationBtn = document.getElementById('get-location-btn');
+    const locationStatus = document.getElementById('location-status');
 
+    let uploadedFile = null;
+
+    // Handle Geolocation Prompt
+    getLocationBtn.addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        locationStatus.textContent = 'GPS unsupported. Default: Bangalore';
+        locationStatus.className = 'text-center text-xs text-amber-400 font-mono py-1';
+        return;
+      }
+
+      locationStatus.textContent = 'Acquiring GPS fix...';
+      locationStatus.className = 'text-center text-xs text-amber-300 py-1 animate-pulse';
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          userCoords = {
+            lat: position.coords.latitude.toFixed(4),
+            lng: position.coords.longitude.toFixed(4)
+          };
+          locationStatus.textContent = `GPS: ${userCoords.lat}, ${userCoords.lng}`;
+          locationStatus.className = 'text-center text-xs text-emerald-400 font-mono py-1';
+        },
+        (error) => {
+          console.warn('Geolocation denied/failed. Defaulting to Bangalore:', error);
+          userCoords = { ...BANGALORE_COORDS };
+          locationStatus.textContent = 'Default: Bangalore (12.9716, 77.5946)';
+          locationStatus.className = 'text-center text-xs text-amber-400 font-mono py-1';
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    });
+
+    // Handle Image Selection
     dropZone.addEventListener('click', () => imageInput.click());
     imageInput.addEventListener('change', (e) => {
       if (e.target.files.length) {
@@ -173,6 +230,10 @@
         const formData = new FormData();
         formData.append('images', compressedFile);
         formData.append('organs', 'auto');
+        
+        // Append latitude & longitude (either user GPS or Bangalore default)
+        formData.append('lat', userCoords.lat);
+        formData.append('lon', userCoords.lng);
 
         const response = await fetch('/api/identify', {
           method: 'POST',
