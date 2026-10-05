@@ -1,6 +1,6 @@
 export const config = {
   api: {
-    bodyParser: false, // Allows streaming raw multipart image uploads
+    bodyParser: false, // Stream multipart body directly
   },
 };
 
@@ -11,14 +11,19 @@ export default async function handler(req, res) {
 
   try {
     const apiKey = process.env.PLANTNET_API_KEY;
-
     if (!apiKey) {
       return res.status(500).json({ error: 'PLANTNET_API_KEY is not configured in Vercel settings.' });
     }
 
-    const plantnetUrl = `https://my-api.plantnet.org/v2/identify/all?api-key=${apiKey.trim()}`;
+    // Extract lat/lon from incoming request URL query parameters
+    const { lat, lon } = req.query || {};
 
-    // Pass headers simulating a direct browser request to bypass Cloudflare IP blocks
+    // Build target PlantNet URL with query params
+    let plantnetUrl = `https://my-api.plantnet.org/v2/identify/all?api-key=${apiKey.trim()}`;
+    if (lat && lon) {
+      plantnetUrl += `&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
+    }
+
     const response = await fetch(plantnetUrl, {
       method: 'POST',
       headers: {
@@ -36,7 +41,7 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       return res.status(response.status).json({
-        error: data.message || `PlantNet API returned status ${response.status}`,
+        error: data.message || `PlantNet API status ${response.status}`,
         details: data,
       });
     }
