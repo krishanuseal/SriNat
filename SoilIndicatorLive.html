@@ -41,7 +41,7 @@
       </div>
 
       <button id="analyze-btn" disabled class="mt-6 w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 text-slate-950 font-bold py-3 rounded-xl transition flex items-center justify-center gap-2">
-        <i data-lucide="sparkles" class="w-5 h-5"></i> Analyze via Serverless Route
+        <i data-lucide="sparkles" class="w-5 h-5"></i> Identify Species
       </button>
     </section>
 
@@ -54,7 +54,7 @@
 
       <div id="state-loading" class="hidden h-full flex flex-col items-center justify-center text-center p-8">
         <div class="w-12 h-12 border-4 border-emerald-500/30 border-t-emerald-400 rounded-full animate-spin mb-4"></div>
-        <p class="text-base font-semibold text-slate-200">Processing via Vercel Backend...</p>
+        <p id="loading-status-text" class="text-base font-semibold text-slate-200">Processing via Vercel Backend...</p>
       </div>
 
       <div id="state-results" class="hidden space-y-6">
@@ -117,6 +117,16 @@
       }
     });
 
+    // Helper: Convert File object to Base64 data URL
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = (error) => reject(error);
+        reader.readAsDataURL(file);
+      });
+    }
+
     analyzeBtn.addEventListener('click', async () => {
       if (!uploadedFile) return;
 
@@ -125,14 +135,12 @@
       document.getElementById('state-loading').classList.remove('hidden');
 
       try {
-        const formData = new FormData();
-        formData.append('images', uploadedFile);
-        formData.append('organs', 'auto');
+        const base64Data = await fileToBase64(uploadedFile);
 
-        // Calls your Vercel Serverless Function (No CORS or origin errors)
         const response = await fetch('/api/identify', {
           method: 'POST',
-          body: formData
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ base64Image: base64Data })
         });
 
         if (!response.ok) {
